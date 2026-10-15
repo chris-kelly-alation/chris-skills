@@ -28,8 +28,8 @@ This structure exists for two reasons. The user wants a direct back-and-forth wi
 
    If a part is missing, propose it to the user, then add it.
 3. **Add an `## Orchestration` section** to the doc if it does not exist. Use the template in `references/templates.md`. It records your session name, the rules for messages, and a status table with one row per PR (status, ticket, session, worktree, prerequisites). This section lets a fresh orchestrator session take over from you.
-4. **Find your own session name.** Run `ListAgents` and find this session. If you cannot find it, ask the user what this session is called. Record the name in the Orchestration section. PR sessions need the name to send you messages.
-5. **Session names are not stable.** A session can get a new name when it restarts, and this happens to the orchestrator and to PR sessions. So:
+4. **Give this session a stable name.** Automatic names (for example `caramel-coat-82ce60a8-d7`) change when the session restarts. Ask the user to run `/rename <name>` in this session, for example `/rename aai-oncall-orchestrator`, or to start it with `claude --name <name>`. A name set this way stays the same after restarts and resume. Then run `ListAgents` and check that this session shows the name. Record the name in the Orchestration section. PR sessions need the name to send you messages. If the user does not name the session, record the automatic name, and use the fallback rules in step 5.
+5. **Fallback for sessions without a stable name.** A session with an automatic name can get a new name when it restarts. This can occur to the orchestrator and to PR sessions. The start prompt asks the user to name each PR session (see the entry gate), so these rules apply only when a session has no stable name:
    - At the start of each of your turns after a restart or a summary, run `ListAgents` and compare your name with the one in the Orchestration section. If it changed, update the doc and send a `PLAN UPDATE` with the new name to every active PR session.
    - When a message arrives from a PR session under a name that is different from the one in the status table, check the PR ID and the worktree. Then update the row and reply to the new address.
    - If a send fails, run `ListAgents`, and find the session by its PR ID or worktree. Ask the user if the match is not clear.
@@ -49,7 +49,7 @@ Do this when the user asks for the next ticket or PR session, or when a merge un
 2. **Check the section against the latest `main`.** Send a `scout` to confirm the file paths, symbols, and facts that the PR section uses. They can drift after the plan was written or after upstream PRs merged. Fix any drift in the doc first (rule 2 applies).
 3. **Limit parallel work.** Allow at most one active PR for each independent track in the dependency chart. More sessions at once give more change requests, and more of them conflict.
 4. **Write the ticket draft** from the PR section. Include the goal, the scope, the contracts that it provides to later PRs and uses from earlier PRs, the edge cases, the tests, and the done criteria. Show it to the user. Create it in the ticket system only after the user approves.
-5. **Write the start prompt** for the PR session with the template in `references/templates.md`, and give it to the user. The user opens a new session (not a fork, which would copy this session's large context) and pastes the prompt. The user starts PR sessions in a worktree already, so the prompt must not tell the agent to create a worktree or a directory.
+5. **Write the start prompt** for the PR session with the template in `references/templates.md`, and give it to the user. The user opens a new session (not a fork, which would copy this session's large context) and pastes the prompt. The user starts PR sessions in a worktree already, so the prompt must not tell the agent to create a worktree or a directory. Tell the user to name the new session before they paste the prompt, for example `/rename al-271149-pr1` (ticket + PR ID). Record that name in the status table.
 6. Set the status to `in progress` and record the session name when the PR agent sends its first `ACK`.
 
 ## Processing messages
@@ -64,6 +64,7 @@ The formats are in `references/protocol.md`. Messages arrive in your conversatio
    - *Scope change*: work is added, removed, or moved between PRs.
 2. **Check the effect.** Read the doc sections that use the item. Send a `scout` if a code fact is in doubt. List every PR that the change affects.
 3. **Decide who approves it.** You apply a correction when it changes no contract. Put contract, decision, and scope changes to the user, with your recommendation, unless the user has pre-approved that class of change.
+   If the PR session reports that the user already made the decision there ("Chris's decision in this session"), treat it as the user's decision: apply it with a provenance note that says so, tell the user in one line, and do not ask again. Ask again only if it conflicts with another PR's contract or an earlier decision.
 4. Apply the change in the doc, with a provenance note.
 5. Send `PLAN UPDATE` to every **active** affected PR session. Record the updates for sessions that are not started yet in their sections, so they get them at start.
 6. Send `ACK` to the sender, with the result: applied, rejected (with the reason), or waiting for the user. A blocking request must get an answer quickly. If the user must decide, tell the sender that it waits for the user.

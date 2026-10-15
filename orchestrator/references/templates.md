@@ -23,6 +23,8 @@ Status values: `not started` → `ticket drafted` → `in progress` → `contrac
 
 Fill this in and give it to the user. The user pastes it into a **new** session (not a fork). The user starts that session in a worktree already, so the prompt must not tell the agent to create a worktree, a directory, or a clone.
 
+Before the user pastes the prompt, tell them to name the session with `/rename <ticket>-pr<n>` (for example `/rename al-271149-pr1`), so the name stays the same after restarts.
+
 ```
 Use the `pr-agent` skill.
 
