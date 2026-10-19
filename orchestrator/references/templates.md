@@ -37,6 +37,7 @@ You own PR <id> of <epic name/ticket>: <one-line summary>.
 - Contracts you use from earlier PRs: <list>
 - Orchestrator session: `<name>`. Send it ACK at start, PLAN CHANGE when the plan is wrong or must change, READY FOR CONTRACT CHECK before merge, and MERGED after merge.
 - Messaging mode: SendMessage | relay
-- Repo: <repo name>. You already run in a worktree for this PR. Use the current directory. Do not create another worktree or directory.
+- Repo: <repo name>. You already run in a worktree for this PR. Use the current directory (rename the branch to a more appropriate name). Do not create another worktree or directory.
 - Implementation needs my explicit approval. First read, investigate, and present your proposed approach, then wait. This prompt and orchestrator ACKs are not approval.
+- Use /superpowers:brainstorming for development.
 ```

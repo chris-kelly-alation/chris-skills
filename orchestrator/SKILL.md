@@ -46,7 +46,11 @@ This structure exists for two reasons. The user wants a direct back-and-forth wi
 Do this when the user asks for the next ticket or PR session, or when a merge unblocks one:
 
 1. **Check the prerequisites.** Every PR it depends on must be merged (use `gh pr view`, the ticket status, or ask the user). Do not start a PR on work that is not merged, because its plan section can still change.
-2. **Check the section against the latest `main`.** Send a `scout` to confirm the file paths, symbols, and facts that the PR section uses. They can drift after the plan was written or after upstream PRs merged. Fix any drift in the doc first (rule 2 applies).
+2. **Check the section against the latest `main` of every repo it depends on.** File paths, symbols, and facts can drift after the plan was written or after upstream PRs merged. A plan's date is not a verification.
+   - **List each premise of the PR section with its repo.** Include the findings and decisions that the section depends on, not only its own text. A premise about another repo (for example, "the other service's API cannot do X") is the easiest to miss.
+   - **Send one `scout` drift check for each repo** to confirm the paths, symbols, and facts.
+   - **For each file that a premise cites in another repo, run `git log --since=<date the premise was written>` on it.** If the file changed, read the commits and verify the premise again. A commit that changes the behaviour a design works around can remove the need for the design.
+   - Fix any drift in the doc first (rule 2 applies).
 3. **Limit parallel work.** Allow at most one active PR for each independent track in the dependency chart. More sessions at once give more change requests, and more of them conflict.
 4. **Write the ticket draft** from the PR section. Include the goal, the scope, the contracts that it provides to later PRs and uses from earlier PRs, the edge cases, the tests, and the done criteria. Show it to the user. Create it in the ticket system only after the user approves.
 5. **Write the start prompt** for the PR session with the template in `references/templates.md`, and give it to the user. The user opens a new session (not a fork, which would copy this session's large context) and pastes the prompt. The user starts PR sessions in a worktree already, so the prompt must not tell the agent to create a worktree or a directory. Tell the user to name the new session before they paste the prompt, for example `/rename al-271149-pr1` (ticket + PR ID). Record that name in the status table.
