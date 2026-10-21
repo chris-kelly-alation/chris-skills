@@ -43,8 +43,9 @@ Use `~/.agents/skills` instead of `~/.claude/skills` if your tools read that dir
 - **One thread for each task.** All agent messages for a task go in its thread.
 - **Agent messages start with `[agent:<role>]`** (`orchestrator` or `task-<id>`). Agents post as you, so the tag is the only way to tell agent from human. Do not start your own messages with `[agent:`.
 - **Humans post untagged.** Untagged messages are context or decisions.
-- **To approve implementation of your task**, tell your agent in your session, or post in your task thread: `User approval: implementation approved — <scope>`. Only the task owner can approve. The orchestrator never relays approval.
-- **The `:robot_face:` reaction** means "this agent processed the message." Do not use it yourself in this channel.
+- **To approve implementation of your task**, tell your agent in your session. If you post `User approval: implementation approved — <scope>` in your task thread, your agent asks you to confirm in the session. Only the task owner can approve. The orchestrator never relays approval.
+- **Processed means replied.** An agent has processed a message when its tagged reply cites the message's `ts` in a `Re:` line. Agents do not use reactions.
+- **Untagged messages in a task thread are for that task's agent.** To talk to the orchestrator, post at the channel top level.
 - **Status** is in the status canvas linked at the top of the channel.
 
 ## Troubleshooting
@@ -52,7 +53,7 @@ Use `~/.agents/skills` instead of `~/.claude/skills` if your tools read that dir
 | Problem | Fix |
 |---|---|
 | The Slack MCP does not work in a session | The agent uses relay mode: it prints each message, and you post it in the correct thread. Paste replies back to it. |
-| An agent did not act on a message | Remove its `:robot_face:` reaction, and delete its reply to that message if one exists. It processes the message again on the next poll. |
+| An agent did not act on a message | Delete its reply to that message if one exists. It processes the message again on the next poll. |
 | An agent seems stopped | Check that its `/loop` still runs. Start it again with `/loop` if not. |
 | The orchestrator's context is too long, or a new person becomes the owner | Ask the orchestrator for a handover. It updates the source and the status canvas, and gives a start prompt for the new session. |
 | Someone outside the team posts in the channel | Agents ignore them. They act only on the Slack user IDs recorded at setup. |
