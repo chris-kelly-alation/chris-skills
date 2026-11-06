@@ -53,8 +53,8 @@ Do this when the user asks for the next ticket or PR session, or when a merge un
    - Fix any drift in the doc first (rule 2 applies).
 3. **Limit parallel work.** Allow at most one active PR for each independent track in the dependency chart. More sessions at once give more change requests, and more of them conflict.
 4. **Write the ticket draft** from the PR section. Include the goal, the scope, the contracts that it provides to later PRs and uses from earlier PRs, the edge cases, the tests, and the done criteria. Show it to the user. Create it in the ticket system only after the user approves.
-5. **Write the start prompt** for the PR session with the template in `references/templates.md`, and give it to the user. The user opens a new session (not a fork, which would copy this session's large context) and pastes the prompt. The user starts PR sessions in a worktree already, so the prompt must not tell the agent to create a worktree or a directory. Tell the user to name the new session before they paste the prompt, for example `/rename al-271149-pr1` (ticket + PR ID). Record that name in the status table.
-6. Set the status to `in progress` and record the session name when the PR agent sends its first `ACK`.
+5. **Launch the PR session.** If detection passes (see `references/orca-launch.md`), use the Orca launch procedure. Otherwise, write the start prompt with the template in `references/templates.md` and give it to the user. Tell the user to open a new session (not a fork) in a worktree, run `/rename <session-name>` (for example `/rename al-271149-pr1`, ticket + PR ID), and paste the prompt. The prompt must not tell the agent to create a worktree or a directory. Record the session name in the status table.
+6. Set the status to `in progress` when the PR agent sends its first `ACK`.
 
 ## Processing messages
 

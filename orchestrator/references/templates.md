@@ -26,7 +26,7 @@ Fill this in and give it to the user. The user pastes it into a **new** session 
 Before the user pastes the prompt, tell them to name the session with `/rename <ticket>-pr<n>` (for example `/rename al-271149-pr1`), so the name stays the same after restarts.
 
 ```
-Use the `pr-agent` skill.
+Use the `pr-agent` skill. Run /dev-start first.
 
 You own PR <id> of <epic name/ticket>: <one-line summary>.
 - Plan doc (source of truth, read-only for you): <absolute path>
