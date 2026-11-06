@@ -2,8 +2,17 @@
 
 Logfire: call `query_schema_reference` once per session before writing SQL. Always add `LIMIT`. Pass `start_timestamp` / `end_timestamp` (ISO 8601, max 14 days). Window = alert start − 15 min → now (or → resolved time).
 
+## Query knowledge
+
+Before writing Logfire SQL or Grafana LogQL, read the `observability:logfire` and `observability:grafana` skills for schema and label hints. They list valid attributes (such as `attributes->>'tenant_id'`, `attributes->>'referer'`, `attributes->>'agent_name'`, `attributes->>'chat_id'`, `attributes->>'user_id'`, `attributes->>'req_id'`) and invalid column names. Still run queries through the MCP servers, not the plugin scripts. `query_schema_reference` remains the authority if they disagree.
+
+## Method: `alation-ai-ops:live-debug`
+For a P1/P2, or a customer-specific issue, follow `alation-ai-ops:live-debug` as the method: triage → logs and client data → code at the deployed version → hypothesis with a negative and a positive test. Its gates apply: no hypothesis without an error message, and record what each query returned. The steps below are the on-call form of that method.
+These on-call rules override live-debug: do NOT apply a fix and do NOT open a PR (its "Apply fix" and "Resolve" steps). Record the fix proposal and hand it off with `handoff.md`. Write the result into the issue file, not as a separate live-debug report. Run queries through the MCP servers, not the plugin scripts.
+
 ## Full (P1/P2)
 1. Notify (SKILL.md § Notifications).
+1a. Tenant: if the alert or thread names a customer, tenant URL, or namespace, resolve it with `alation-ai-ops:tenant` (tenant URL, cluster, region, namespace UUID, alation-ai version). Record `environment`, `region`, and the tenant in the issue. Use the namespace UUID for the Logfire `tenant_id` filter (step 3) and the version for `code:history` (step 4).
 2. Grafana:
    - `alerting_rules_read` for the rule UID (from the alert URL). Note the query and threshold.
    - Run the rule's query over the window: `query_loki_logs` (use the drilldown in the alert description) or `query_prometheus`.
@@ -12,15 +21,16 @@ Logfire: call `query_schema_reference` once per session before writing SQL. Alwa
    - Exceptions: `SELECT exception_type, exception_message, count(*) AS n, min(start_timestamp) AS first, max(start_timestamp) AS last FROM records WHERE is_exception GROUP BY 1, 2 ORDER BY n DESC LIMIT 20`
    - Error rate per 5 min: `SELECT date_bin(INTERVAL '5 minutes', start_timestamp) AS t, count(*) FILTER (WHERE level >= level_num('error')) AS errs, count(*) AS total FROM records GROUP BY t ORDER BY t LIMIT 300`
    - Slow spans: `SELECT span_name, approx_percentile_cont(duration, 0.95) AS p95, count(*) AS n FROM records GROUP BY 1 ORDER BY p95 DESC LIMIT 20`
-   - Add a tenant filter when the alert names a tenant (check `query_schema_reference` for the attribute name).
+   - Add a tenant filter when the alert names a tenant: `attributes->>'tenant_id'` (namespace UUID) or `attributes->>'referer'` (tenant URL) are the expected attribute names. Verify with `query_schema_reference` if needed.
    - Use `project_logfire_link` for 1–3 representative traces.
    - `level` is numeric; if `level_num` is not available, check `query_schema_reference`. If a query fails on a column or function, fix it from `query_schema_reference` and tell the user the working form (propose an update to this file; do not edit the skill yourself).
-4. Deploys: `sources.md` § Repo. Note merges or tags within 2 h before the alert.
+4. Deploys: `sources.md` § Repo. Note merges or tags within 2 h before the alert. For what's in a release (tag containment, release-branch diffs), see `code:history` § "What's in a release" and its `checkout-version` script (local path `~/alation-ai`).
 5. P1: read the `Resolve` bot investigation in the C08661AE62U thread. List its claims as hypotheses; confirm or refute each with evidence.
 6. Runbook match (`runbooks.md` § Matching).
 7. Record in the issue (dashboard row; issue file if major): hypothesis, evidence links, verdict, next step.
 8. Save a Slack draft with `slack_send_message_draft` in the alert thread (`thread_ts` = alert ts): what we see, probable cause, evidence links, next step. 5 lines or fewer. Tell the user the draft exists. Set `draft_saved: true`.
    Slack allows only one attached draft per conversation. If the call returns `draft_already_exists` (or a draft for another issue in the same conversation is still unsent), do not overwrite it: put the draft text in the issue file / dashboard row under "Draft reply" and ask the user to delete the old draft. The same applies when a draft save fails. Save at most one draft per issue per significant change of understanding.
+9. **Front-end symptoms (optional):** For alerts with UI errors, slow page loads, or failed API calls from the browser (Agent Studio UI issues, compose problems, catalog timeouts), use `observability:datadog-rum` for its query syntax. Run queries through the Datadog MCP servers (`mcp__datadog-mcp__*`, read-only). The skill provides attribute names, valid paths, and timing units.
 
 ## Alert-specific checks (from on-call experience; also proposed for the runbooks)
 - **Deep health check failure (`/api/v1/healthz/deep`):** before you name a cause, read the `checks` array of the log `deep health check reported non-pass` (`status.py`): status, output and time for every component. Only checkers that catch their own error write a `<name> probe failed` line; a `Check timed out after 5.0s` (outer `wait_for`) writes none. A `critical` component (postgres, bedrock) gives overall `fail` → HTTP 503 → the P1; `high`/`medium` give only `warn`. (10-14 euc1: first read "OpenAI" was wrong — bedrock timed out, cause was a CoreDNS node stall.)

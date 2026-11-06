@@ -84,7 +84,7 @@ Whenever a message asks the user to decide something, also add it to `state.json
 Run `osascript -e 'display notification "<msg>" with title "On-call" sound name "Glass"'` for: new P1/P2, priority escalation, MCP re-auth needed, a runbook proposal or code handoff waiting for the user. Each event has a key (for example `new:<slug>`, `esc:<slug>:P1`, `reauth:<server>`, `proposal:<n>`, `handoff:<slug>`). Notify only if the key is not in `state.json.notified`, then add it. When an issue becomes `reopened`, remove its `new:` and `esc:` keys first, so the reopen notifies.
 
 ## Delegation
-Investigation judgment stays in this session. Broad searches in `~/alation-ai` (find the code for an error, the callers of a function) go to a `scout` agent.
+Investigation judgment stays in this session. Broad searches in `~/alation-ai` (find the code for an error, the callers of a function) go to a `scout` agent. Query syntax and schema knowledge come from `observability:logfire`, `observability:grafana`, and `observability:datadog-rum` (read-only; queries run through MCP servers). Code version questions and worktree checkouts use `code:history`. Tenant lookup uses `alation-ai-ops:tenant`; the P1/P2 investigation method is `alation-ai-ops:live-debug`, with the on-call overrides in `references/investigate.md` (no fixes, no PRs).
 
 ## state.json schema
 ```json
