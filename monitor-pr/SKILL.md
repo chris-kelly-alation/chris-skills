@@ -46,11 +46,15 @@ this in the foreground", or similar, proceed with inline execution (Steps 2-7).
 
 ### If using a subagent (default):
 
-Spawn a background monitoring agent with the Agent tool:
+Spawn a background monitoring agent. This agent diagnoses failures and commits fixes, so it is the `executor` role. Do not use an unpinned general-purpose agent, and do not use `scout`: scout cannot run `gh` or edit files.
+
+- Claude Code: `subagent_type: "executor"`. Do not pass `model`; the role file pins Sonnet. Passing `opus` puts this loop on the session model.
+- Codex: the `executor` role with `model: "us.openai.gpt-6.1-terra"` and `model_reasoning_effort: "low"`.
 
 ```
 Agent({
   description: "Monitor PR #<NUMBER> checks",
+  subagent_type: "executor",
   prompt: "Monitor PR #<NUMBER> in <OWNER/REPO>. Poll CI checks every 30 seconds.
 For each new failure, spawn investigation subagents in the background. Present
 failures one at a time to the user, wait for resolution choice, implement fixes,
@@ -106,7 +110,10 @@ Checks: 4 passing, 1 failing, 2 pending
 
 For each newly-failed check, use the **Agent tool** to spawn an investigation
 subagent. Run these in the background so multiple failures get analyzed
-concurrently while polling continues.
+concurrently while polling continues. Use the same `executor` role as the
+monitoring agent (Claude: `subagent_type: "executor"` with no model override;
+Codex: `executor` at `us.openai.gpt-6.1-terra`, effort `low`). Diagnosing a
+failure is judgment work, and an unpinned agent inherits the session model.
 
 ### What to tell the investigation subagent
 
