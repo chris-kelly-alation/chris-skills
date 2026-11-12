@@ -145,6 +145,31 @@ def test_lint_patterns(tree):
     }
 
 
+def test_secret_lint_needs_literal_value(tree):
+    root, agents = tree
+    write(root / "literal.md", "```\nTOKEN=abc123\n```\n")
+    write(root / "cmdsub.md", '```\nGITHUB_TOKEN="$(gh auth token)"\n```\n')
+    write(root / "empty.md", "```\nGITHUB_TOKEN= gh auth refresh\n```\n")
+    write(root / "var.md", "```\nPASSWORD=$DB_PASS\nTOKEN=\n```\n")
+    write(
+        agents,
+        "`~/.agents/docs/literal.md` `~/.agents/docs/cmdsub.md` "
+        "`~/.agents/docs/empty.md` `~/.agents/docs/var.md`\n",
+    )
+    findings = check(root, agents)
+    assert triples(findings, "lint") == {("warn", "lint", "literal.md")}
+
+
+def test_links_in_inline_code_are_ignored(tree):
+    root, agents = tree
+    write(root / "code.md", 'Use `template.blocks["name"](template.new_context(ctx))` here.\n')
+    write(root / "real.md", "See [x](gone.md) and `[y](also-gone.md)`.\n")
+    write(agents, "`~/.agents/docs/code.md` `~/.agents/docs/real.md`\n")
+    findings = check(root, agents)
+    assert triples(findings, "broken-link") == {("error", "broken-link", "real.md")}
+    assert [f.detail for f in findings if f.kind == "broken-link"] == ["line 1: gone.md does not exist"]
+
+
 class FakeGh:
     """Stands in for check_tree.run_gh. Records every call."""
 

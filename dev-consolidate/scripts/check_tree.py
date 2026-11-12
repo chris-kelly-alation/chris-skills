@@ -28,6 +28,7 @@ DISPATCH_BEGIN = re.compile(r"<!--\s*dispatch:(claude|codex):begin\s*-->")
 DISPATCH_END = re.compile(r"<!--\s*dispatch:(claude|codex):end\s*-->")
 MENTION_RE = re.compile(r"~/\.agents/docs/([A-Za-z0-9_./-]+\.md)(?![A-Za-z0-9_./<-])")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+INLINE_CODE_RE = re.compile(r"`[^`]*`")
 SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 POINTER_RE = re.compile(r"`([A-Za-z0-9_.-]+):([^`\s]+)`")
 ORIGIN_RE = re.compile(r"^Origin:\s*github\.com/([^/\s]+)/([^/\s]+?)\s*$")
@@ -41,7 +42,7 @@ PROSE_LINT = [
     (re.compile(r"`[^`\s]*\.[A-Za-z0-9]+:\d+`"), "line-number code pointer"),
 ]
 SECRET_LINT = [
-    (re.compile(r"PASSWORD=|TOKEN=|PASSPHRASE=", re.I), "secret assignment"),
+    (re.compile(r"(?:PASSWORD|TOKEN|PASSPHRASE)=[\"']?[^\s$\"']", re.I), "secret assignment"),
 ]
 BASE64_RUN_RE = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
 HEX_RE = re.compile(r"[0-9a-fA-F]+")
@@ -81,7 +82,7 @@ def _relative_links(text: str):
     for lineno, line, in_fence in _scan(text):
         if in_fence:
             continue
-        for match in LINK_RE.finditer(line):
+        for match in LINK_RE.finditer(INLINE_CODE_RE.sub("", line)):
             target = match.group(1).split("#", 1)[0]
             if not target or target.startswith(("/", "~")) or SCHEME_RE.match(target):
                 continue
