@@ -1,85 +1,116 @@
 ---
 name: dev-consolidate
 description: >
-  Garden the development learnings store: fold inbox entries into curated
-  learnings, promote cross-repo recurring learnings up to shared stack/core
-  files, dedupe, prune obsolete entries, push bulky detail into detail files,
-  and enforce size budgets. Runs across ALL registered repos at once by default
-  (optionally a single repo). Use this periodically — when the user wants to
-  consolidate, clean up, garden, compact, or process inbox learnings, or every
-  several sessions. Supports a dry-run that reports the plan without writing.
+  Garden and audit the agent docs tree at ~/.agents/docs: file inbox entries
+  into the right docs, enforce size limits, check links, reachability, code
+  pointers, and lint, and clean up finished plan artifacts. Runs across the
+  whole tree by default (optionally one repo or project). Use this periodically
+  — when the user wants to consolidate, clean up, garden, audit, compact, or
+  process inbox learnings, or every several sessions. Supports a dry-run that
+  reports the plan without writing.
 ---
 
 # dev-consolidate
 
-The periodic, judgment-heavy pass kept off the hot path. Default scope is **all
-registered repos at once** — seeing the whole store is what lets you detect that
-a learning recurs across repos and therefore belongs in a shared file.
+The periodic, judgment-heavy pass kept off the hot path. It files raw capture
+into the docs tree and audits the tree. Default scope is the **whole tree**.
+Seeing everything is what lets you detect that a lesson recurs across repos and
+belongs in a shared doc.
 
 Modes:
-- **all repos** (default) — no argument.
-- **single repo** — when the user names one (e.g. "consolidate alation-ui").
+- **all** (default) — no argument.
+- **single repo or project** — when the user names one (for example
+  "consolidate alation-ui").
 - **dry-run** — when the user says dry-run / preview / "what would you do":
-  produce the report in step 6 but write nothing and don't commit.
+  run every pass, produce the report, write nothing, delete nothing, and do not
+  commit.
 
-Store root is `$DEV_LEARNINGS_HOME` (default `~/.claude/dev-learnings`).
+Tree root: `~/.agents/docs`. Rules for the docs: `~/.agents/docs/writing-docs.md`
+(read it first). The checker is `scripts/check_tree.py` in this skill's
+directory. Run it as `python3 -I <skill dir>/scripts/check_tree.py`; it reads
+`--root` (default `~/.agents/docs`) and `--agents-md` (default
+`~/.agents/AGENTS.md`). Each finding is one line: `<level> <kind> <path>: <detail>`.
 
-## Procedure
+There is no lock. Concurrent runs are not supported.
 
-1. **Discover.** Read `registry.json`. Collect every repo whose
-   `repos/<namespace>/INBOX.md` has entries below the marker. Silently skip
-   empty inboxes. (Single-repo mode: just that one.)
+## Passes
 
-2. **Load the whole store** once: `core.md`, all `stacks/*.md`, and for each
-   in-scope repo its `learnings.md` + `INBOX.md` (+ `detail/*.md` as needed).
-   This is the cost center — see Scaling below if it ever strains context.
+Run in order.
 
-3. **Cluster across repos.** Group inbox entries (and existing learnings) that
-   express the same underlying lesson, including matches against already-curated
-   content. Cross-repo clusters are the signal for promotion.
+1. **File the inbox.** Read each file in `~/.agents/docs/inbox/`.
+   - `learning` → the right doc, as a one-line rule. Promotion rule: a lesson
+     that spans repos on one stack goes to that stack doc; one that spans repos
+     with no common stack goes to `core`; a lesson for one repo goes to that repo
+     doc. Do not promote on one data point. If two repos have opposing
+     conventions, keep both repo-local. When you promote, remove the redundant
+     copies from the repo docs.
+   - `stale-doc` → check the claim against the code, then fix the doc.
+   - `epic-complete` → add each decision (one line: date, reason, ticket or PR
+     link) and the new entry-point pointers to the feature doc under
+     `projects/`, and add the work to its Prior work section. Then mark the
+     listed artifacts as ready to delete (pass 6).
+   - Delete each inbox file after you file it.
+   - Keep doc content to what `writing-docs.md` allows: no step lists, no
+     status, no line-number pointers, no secrets.
 
-4. **Promote, by this rule:**
-   - Cluster spans repos that **share a stack** → promote to that
-     `stacks/<stack>.md`.
-   - Cluster spans repos with **no common stack** → promote to `core.md`.
-   - A single repo's entry tagged `candidate-core`/`candidate-stack` but seen in
-     only one repo so far → keep it repo-local but leave the candidate tag noted;
-     promote once a second repo corroborates it. Don't promote on one data point.
-   - **Contradiction** (two repos with opposing conventions) → do **not** merge
-     upward; keep both repo-local, and if useful note the divergence in each.
-   - When you promote, **remove the now-redundant copies** from the individual
-     repos so nothing is duplicated across tiers.
+2. **Limits.** Run the checker. Flag docs over 150 lines (`over-soft`). Split a
+   doc over 300 lines (`over-hard`) along its `##` headings: the parent keeps
+   its name and becomes a hub with one line per child. Move rules; do not
+   rewrite them. If a doc cannot be split cleanly, report it and fail the run.
 
-5. **Per-repo cleanup**, for each in-scope repo:
-   - Merge remaining inbox entries into `learnings.md` as compact one-line rules.
-   - Push any bulky specifics (long code, step-by-step) down into a
-     `detail/<area>.md`, leaving a one-line pointer in `learnings.md`.
-   - **Prune obsolete entries** — e.g. a stopgap whose tracking ticket has
-     shipped. Pruning and rewriting are expected; this is not append-only.
-   - **Enforce the size budget:** `learnings.md` stays a compact index (rough
-     target: under ~120 lines / mostly one-liners). If it's overflowing, move
-     detail down, not the other way around.
-   - Clear the consolidated entries from `INBOX.md` (keep the header/format).
+3. **Structure.** Run the checker. Fix every `broken-link`, `orphan`, and
+   `hub-missing-child`. The checker finds orphans by walking from the
+   `AGENTS.md` index. When a hub is not reachable (for example a new project
+   hub), add or change an index line in `~/.agents/AGENTS.md`. Edit only
+   outside the `<!-- dispatch:*:begin -->` … `<!-- dispatch:*:end -->` blocks,
+   and never change a byte inside them. Before each edit, copy the file to
+   `~/.agents/docs/.agents-md-backups/AGENTS.md.<timestamp>` and keep only the
+   last 10 backups. Index paths are absolute (`~/.agents/docs/...`). If the
+   index grows over the limit, move the repo and stack lines to a listing doc.
 
-6. **Report and commit.** Produce a summary:
-   - per repo: entries consolidated, promoted, pruned;
-   - cross-cutting: what was promoted to core / each stack, and why.
-   In dry-run, stop here — print the plan, write nothing. Otherwise make **one**
-   atomic commit across the whole store
-   (`consolidate: N entries across M repos; promoted P, pruned Q`) so the pass is
-   easy to review or revert in a single step.
+4. **Pointers.** Run the checker with `--pointers`. It checks each
+   `` `<repo>:<path>` `` pointer on the default branch through `gh api`, with no
+   local clone. For a `broken-pointer`, find the commit that removed or renamed
+   the path with `gh api repos/<org>/<name>/commits?path=<path>`. Repair the
+   pointer only when the rename is unambiguous. Otherwise mark the doc for
+   review. Only docs with a broken pointer or a `stale-doc` entry get a deeper
+   read. Never re-summarize the whole tree. A `warn` from a failed `gh` call is
+   not a broken pointer; report it.
 
-## Scaling
+5. **Lint.** Run the checker. Report every `lint` and `space-in-name` finding:
+   "as of" text, status words, line pointers, long tables, and anything that
+   looks like a secret. Report; do not auto-edit. A secret is the most urgent
+   finding: tell the user at once and do not copy it.
 
-Step 2 reads the whole store, so cost grows with total store size, not per-repo
-size. Fine for a handful of repos. If it ever strains context: first do a cheap
-mechanical pass — hash/normalize inbox lines to find candidate duplicate clusters
-— and only reason in depth over the genuine clusters, rather than ingesting the
-entire corpus at once. Build the simple version unless/until that's needed.
+6. **Artifacts.** List the files in `~/.agents/artifacts/` in two lists:
+   - **Ready to delete:** files whose decisions are already committed to a
+     feature doc (from pass 1 in this run or an earlier one). Delete a file
+     only when its decisions are committed, and only after the user confirms in
+     this run. This is the only way an artifact is deleted.
+   - **Review:** files older than 30 days whose decisions are not lifted. Never
+     delete these, and never delete a file only because it is older than 30
+     days. Show each file with its decisions table (or "no decisions found") so
+     the user can lift the decisions, mark the file as having none, or leave it.
+   - Put a file in neither list when an open epic names it: an orchestrator
+     plan doc with unmerged PRs, and every artifact that such a plan links to.
+     To find them, read the plan docs in `~/.agents/artifacts/` and check their
+     status tables for PRs that are not merged.
+
+## Report and commit
+
+Produce one report: entries filed, docs split, checker findings by kind, broken
+pointers, artifacts in each list. In dry-run, stop here.
+
+Otherwise make **one** commit in `~/.agents/docs` for the whole run
+(`consolidate: filed N entries; split S docs; fixed F findings`), so the pass is
+easy to review or revert in one step. The inbox and backups are git-ignored, so
+the commit holds only doc changes.
 
 ## Notes
 
-- Promotion direction is always toward the **most general tier the evidence
-  supports** — and no further. One repo is not evidence of universality.
-- Prefer merging near-duplicates and deleting stale entries over accumulating;
-  unchecked growth and staleness are the failure modes this pass exists to fight.
+- Promotion goes toward the most general tier the evidence supports, and no
+  further. One repo is not evidence of universality.
+- Prefer merging near-duplicates and deleting stale rules over accumulating.
+  Decisions in feature docs are history: never remove one because it is old. A
+  reversed decision gets a new dated line.
+- Docs orient; code decides. When a doc and the code disagree, the code wins.

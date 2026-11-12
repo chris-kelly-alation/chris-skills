@@ -189,7 +189,7 @@ def test_pointer_only_for_known_repos(tree, monkeypatch):
     root, agents = tree
     write(
         root / "repos" / "alation-ui.md",
-        "Origin: github.com/Alation/alation-ui\n"
+        "Origin: github.com/acme/alation-ui\n"
         "Stack: nx-frontend\n\n"
         "See `alation-ui:libs/x.ts` and `localhost:4200`.\n",
     )

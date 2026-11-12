@@ -19,7 +19,7 @@ This structure exists for two reasons. The user wants a direct back-and-forth wi
 
 ## Setup (once per epic)
 
-1. **Find the plan doc.** Ask the user for its path if it is not clear. Read it completely.
+1. **Find the plan doc.** Ask the user for its path if it is not clear. If the user has no plan doc yet, new plan docs go to `~/.agents/artifacts/YYYY-MM-DD-<epic>.md`. Read it completely.
 2. **Check that the doc can be orchestrated.** It needs:
    - a list of PRs with IDs
    - a dependency chart
@@ -76,6 +76,19 @@ The formats are in `references/protocol.md`. Messages arrive in your conversatio
 **`READY FOR CONTRACT CHECK`:** run the contract gate (below).
 
 **`MERGED`:** set the status to merged. Find the PRs that are now unblocked. Tell the user which PR starts next, and offer to run the entry gate.
+
+When the **last** PR of the epic is merged, write one inbox file, `~/.agents/docs/inbox/YYYY-MM-DD-<epic>-epic-complete.md`, so `/dev-consolidate` can lift the decisions into the docs. Use plain `key: value` lines:
+
+```
+kind: epic-complete
+scope: project:<name>
+decisions: <each decision from the decisions table: date, one-line reason, ticket or PR link>
+prs: <merged PR links>
+tickets: <ticket links>
+artifacts: <absolute paths of the plan doc and the specs>
+```
+
+Do not delete the plan doc or the specs. `/dev-consolidate` deletes them after the decisions are committed and the user confirms.
 
 ## Contract gate: before a merge
 
