@@ -92,7 +92,7 @@ Do not edit a doc to record a quick lesson. Write one file to `~/.agents/docs/in
 
 If that path exists, add `-2`, `-3`, and so on before `.md`. One file per entry means two agents never write
 the same file. Capture needs no lock and no commit.
-`/dev-consolidate` files each entry into the right doc and deletes it. Before you write an entry, search
+`/dev-consolidate` files each entry into the right doc and deletes it after its commit. Before you write an entry, search
 `~/.agents/docs/` for the idea (it may exist).
 
 | Kind | Content |

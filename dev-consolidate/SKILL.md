@@ -106,8 +106,11 @@ pointers, artifacts in each list. In dry-run, stop here.
 Otherwise make **one** commit in `~/.agents/docs` for the whole run
 (`consolidate: filed N entries; split S docs; fixed F findings`), so the pass is
 easy to review or revert in one step. The inbox and backups are git-ignored, so
-the commit holds only doc changes. When the commit succeeds, delete
-`inbox/.filed/<run-timestamp>/`.
+the commit holds only doc changes. When the commit succeeds:
+
+1. Delete `inbox/.filed/<run-timestamp>/`.
+2. Ask the user to confirm the pass-6 "Ready to delete" list (now including
+   names committed in this run). Delete only the files the user confirms.
 
 ## Notes
 
