@@ -1,5 +1,7 @@
 """Tests for check_tree.py. Every tree is built in tmp_path."""
 
+import base64
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -173,40 +175,41 @@ def test_links_in_inline_code_are_ignored(tree):
 class FakeGh:
     """Stands in for check_tree.run_gh. Records every call."""
 
-    def __init__(self, branch_reply, contents_reply):
-        self.branch_reply = branch_reply
-        self.contents_reply = contents_reply
+    def __init__(self, reply):
+        self.reply = reply
         self.calls = []
 
     def __call__(self, args):
         self.calls.append(args)
-        if "--jq" in args:
-            return self.branch_reply
-        return self.contents_reply
+        return self.reply
+
+
+def contents_reply(text: str):
+    body = base64.encodebytes(text.encode()).decode()
+    return 0, json.dumps({"type": "file", "encoding": "base64", "content": body})
+
+
+def hub_tree(root, agents, body):
+    write(
+        root / "repos" / "alation-ui.md",
+        "Origin: github.com/acme/alation-ui\nStack: nx-frontend\n\n" + body,
+    )
+    write(agents, "`~/.agents/docs/repos/alation-ui.md`\n")
 
 
 def test_pointer_only_for_known_repos(tree, monkeypatch):
     root, agents = tree
-    write(
-        root / "repos" / "alation-ui.md",
-        "Origin: github.com/acme/alation-ui\n"
-        "Stack: nx-frontend\n\n"
-        "See `alation-ui:libs/x.ts` and `localhost:4200`.\n",
-    )
-    write(agents, "`~/.agents/docs/repos/alation-ui.md`\n")
+    hub_tree(root, agents, "See `alation-ui:libs/x.ts` and `localhost:4200`.\n")
 
-    fake = FakeGh((0, "master\n"), (1, "gh: Not Found (HTTP 404)"))
+    fake = FakeGh((1, "gh: Not Found (HTTP 404)"))
     monkeypatch.setattr(check_tree, "run_gh", fake)
     findings = check(root, agents, skip={"orphan"}, pointers=True)
     assert triples(findings, "broken-pointer") == {
         ("error", "broken-pointer", "repos/alation-ui.md")
     }
-    contents_calls = [c for c in fake.calls if "contents" in c[1]]
-    assert len(contents_calls) == 1
-    assert contents_calls[0][1].endswith("/contents/libs/x.ts?ref=master")
-    assert all("localhost" not in " ".join(c) for c in fake.calls)
+    assert fake.calls == [["api", "repos/acme/alation-ui/contents/libs/x.ts"]]
 
-    fake = FakeGh((0, "master\n"), (1, "gh: Forbidden (HTTP 403)"))
+    fake = FakeGh((1, "gh: Forbidden (HTTP 403)"))
     monkeypatch.setattr(check_tree, "run_gh", fake)
     findings = check(root, agents, skip={"orphan"}, pointers=True)
     assert triples(findings, "broken-pointer") == {
@@ -214,10 +217,59 @@ def test_pointer_only_for_known_repos(tree, monkeypatch):
     }
 
     # Without --pointers the gh seam is never called.
-    fake = FakeGh((0, "master\n"), (1, "gh: Not Found (HTTP 404)"))
+    fake = FakeGh((1, "gh: Not Found (HTTP 404)"))
     monkeypatch.setattr(check_tree, "run_gh", fake)
     check(root, agents, skip={"orphan"})
     assert fake.calls == []
+
+
+def test_org_repo_pointer_needs_no_hub(tree, monkeypatch):
+    root, agents = tree
+    write(root / "doc.md", "See `other/tool:src/a.py` here.\n")
+    write(agents, "`~/.agents/docs/doc.md`\n")
+    fake = FakeGh((1, "gh: Not Found (HTTP 404)"))
+    monkeypatch.setattr(check_tree, "run_gh", fake)
+    findings = check(root, agents, pointers=True)
+    assert triples(findings, "broken-pointer") == {("error", "broken-pointer", "doc.md")}
+    assert fake.calls == [["api", "repos/other/tool/contents/src/a.py"]]
+
+
+def test_contents_fetched_once_per_file(tree, monkeypatch):
+    root, agents = tree
+    hub_tree(root, agents, "`alation-ui:a/b.ts` and `alation-ui:a/b.ts` again.\n")
+    write(root / "other.md", "`alation-ui:a/b.ts`\n")
+    write(agents, "`~/.agents/docs/repos/alation-ui.md` `~/.agents/docs/other.md`\n")
+    fake = FakeGh((0, "{}"))
+    monkeypatch.setattr(check_tree, "run_gh", fake)
+    check(root, agents, pointers=True)
+    assert len(fake.calls) == 1
+
+
+def test_symbol_check(tree, monkeypatch):
+    root, agents = tree
+    hub_tree(
+        root,
+        agents,
+        "Start at `alation-ui:a/b.ts` and `useThing`.\n"
+        "Also `alation-ui:a/b.ts` then `missingSym`.\n"
+        "And `alation-ui:a/b.ts` plus `with:colon` only.\n",
+    )
+    fake = FakeGh(contents_reply("export function useThing() {}\n"))
+    monkeypatch.setattr(check_tree, "run_gh", fake)
+    findings = check(root, agents, skip={"orphan"}, pointers=True)
+    found = [f for f in findings if f.kind == "broken-pointer"]
+    assert len(found) == 1
+    assert found[0].level == "error"
+    assert "symbol missingSym not found in a/b.ts" in found[0].detail
+    assert len(fake.calls) == 1
+
+
+def test_symbol_not_checked_when_contents_unreadable(tree, monkeypatch):
+    root, agents = tree
+    hub_tree(root, agents, "`alation-ui:a` dir and `Sym`; `alation-ui:big.ts` then `Sym`.\n")
+    fake = FakeGh((0, json.dumps([{"name": "x"}])))
+    monkeypatch.setattr(check_tree, "run_gh", fake)
+    assert not [f for f in check(root, agents, skip={"orphan"}, pointers=True) if f.kind == "broken-pointer"]
 
 
 def test_exit_codes(tmp_path):
@@ -258,3 +310,62 @@ def test_pointer_needs_path_separator(tmp_path, monkeypatch):
     found = check_tree.check(tmp_path, agents, skip={"orphan"}, pointers=True)
     assert not [f for f in found if f.kind == "broken-pointer"]
     assert not [c for c in calls if "contents" in " ".join(c)]
+
+
+@pytest.mark.parametrize(
+    "line, flagged",
+    [
+        ("See foo.ts:120 for it.", True),
+        ("See `foo.ts:12-20` for it.", True),
+        ("See [foo.py:7](x) for it.", True),
+        ("Use `alation-ui:libs/x/y:12` there.", True),
+        ("Use `alation-ui:libs/x/y.ts:12` there.", True),
+        ("Run on localhost:4200 now.", False),
+        ("Open https://localhost:4200 now.", False),
+        ("Meeting at 10:30 and 10:30:45.", False),
+        ("Use `alation-ui:libs/x/y.ts` there.", False),
+    ],
+)
+def test_line_pointer_lint(tree, line, flagged):
+    root, agents = tree
+    write(root / "a.md", line + "\n")
+    write(agents, "`~/.agents/docs/a.md`\n")
+    assert bool(triples(check(root, agents), "lint")) is flagged
+
+
+def test_line_pointer_lint_skips_fences(tree):
+    root, agents = tree
+    write(root / "a.md", "```\nfoo.ts:120\n```\n")
+    write(agents, "`~/.agents/docs/a.md`\n")
+    assert not triples(check(root, agents), "lint")
+
+
+@pytest.mark.parametrize(
+    "line, flagged",
+    [
+        ("password: hunter2", True),
+        ("Token = abc123", True),
+        ("secret=abc", True),
+        ("token: $FOO", False),
+        ("password: <placeholder>", False),
+        ("secret: ", False),
+        ("password: stored in 1Password", False),
+        ("token: in the .env file", False),
+        ("token: refresh before it expires", False),
+        ('TOKEN="$(gh auth token)"', False),
+    ],
+)
+def test_secret_lint_forms(tree, line, flagged):
+    root, agents = tree
+    write(root / "a.md", f"```\n{line}\n```\n")
+    write(agents, "`~/.agents/docs/a.md`\n")
+    assert bool(triples(check(root, agents), "lint")) is flagged
+
+
+def test_base64_run_with_slash_is_ignored(tree):
+    root, agents = tree
+    run = "Z" * 20 + "q" * 20 + "X" * 5
+    write(root / "path.md", f"See {run[:25]}/{run[25:]} here.\n")
+    write(root / "blob.md", f"Value {run} here.\n")
+    write(agents, "`~/.agents/docs/path.md` `~/.agents/docs/blob.md`\n")
+    assert triples(check(root, agents), "lint") == {("warn", "lint", "blob.md")}

@@ -11,6 +11,8 @@ Exits 1 if any finding is an error, else 0.
 from __future__ import annotations
 
 import argparse
+import base64
+import json
 import os
 import re
 import subprocess
@@ -22,7 +24,7 @@ from urllib.parse import quote
 SOFT_LIMIT = 150
 HARD_LIMIT = 300
 MAX_TABLE_ROWS = 15
-SKIP_DIRS = ("inbox", ".agents-md-backups")
+SKIP_DIRS = ("inbox",)
 
 DISPATCH_BEGIN = re.compile(r"<!--\s*dispatch:(claude|codex):begin\s*-->")
 DISPATCH_END = re.compile(r"<!--\s*dispatch:(claude|codex):end\s*-->")
@@ -30,20 +32,29 @@ MENTION_RE = re.compile(r"~/\.agents/docs/([A-Za-z0-9_./-]+\.md)(?![A-Za-z0-9_./
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 INLINE_CODE_RE = re.compile(r"`[^`]*`")
 SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
-POINTER_RE = re.compile(r"`([A-Za-z0-9_.-]+):([^`\s]*[/.][^`\s]*)`")
+POINTER_RE = re.compile(
+    r"`(?:(?P<org>[A-Za-z0-9_.-]+)/)?(?P<repo>[A-Za-z0-9_.-]+):(?P<path>[^`\s]*[/.][^`\s]*)`"
+    r"(?:[^`\n]{0,30}`(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)`)?"
+)
 ORIGIN_RE = re.compile(r"^Origin:\s*github\.com/([^/\s]+)/([^/\s]+?)\s*$")
 TABLE_SEP_RE = re.compile(r"\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?")
+
+LINE_POINTER_RE = re.compile(
+    r"[\w.-]+\.[A-Za-z][A-Za-z0-9]*:\d+(?:-\d+)?(?!\w)"
+    r"|\b[\w.-]+:(?!//)[\w./-]*[/.][\w./-]*:\d+(?:-\d+)?(?!\w)"
+)
 
 PROSE_LINT = [
     (re.compile(r"\bas of\b", re.I), "time-bound phrase 'as of'"),
     (re.compile(r"\bin progress\b", re.I), "status phrase 'in progress'"),
     (re.compile(r"\bWIP\b", re.I), "WIP marker"),
     (re.compile(r"\bTODO\b", re.I), "TODO marker"),
-    (re.compile(r"`[^`\s]*\.[A-Za-z0-9]+:\d+`"), "line-number code pointer"),
+    (LINE_POINTER_RE, "line-number code pointer"),
 ]
-SECRET_LINT = [
-    (re.compile(r"(?:PASSWORD|TOKEN|PASSPHRASE)=[\"']?[^\s$\"']", re.I), "secret assignment"),
-]
+SECRET_RE = re.compile(
+    r"(?:password|token|passphrase|secret)(?P<sep>\s*:\s*|\s+=\s+|=)(?P<value>\S+)", re.I
+)
+SECRET_SOURCE_RE = re.compile(r"1password|\.env\b|vault|keychain", re.I)
 BASE64_RUN_RE = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
 HEX_RE = re.compile(r"[0-9a-fA-F]+")
 
@@ -53,10 +64,6 @@ class Finding(NamedTuple):
     kind: str
     path: str
     detail: str
-
-
-def _path_arg(value: str) -> Path:
-    return Path(value).expanduser()
 
 
 def _norm(path: Path) -> Path:
@@ -115,8 +122,21 @@ def _size_findings(rel: str, line_count: int) -> list[Finding]:
 def _long_non_hex_runs(line: str):
     for match in BASE64_RUN_RE.finditer(line):
         run = match.group(0).rstrip("=")
-        if not HEX_RE.fullmatch(run):
+        if "/" not in run and not HEX_RE.fullmatch(run):
             yield run
+
+
+def _has_secret(line: str) -> bool:
+    """True when a secret-like key is assigned a literal value."""
+    for match in SECRET_RE.finditer(line):
+        value = match.group("value").strip("\"'`")
+        if not value or value.startswith(("$", "<")) or SECRET_SOURCE_RE.search(line):
+            continue
+        tail = line[match.end() :].strip(" \t.,;`'\"")
+        if ":" in match.group("sep") and tail:
+            continue  # prose after "key:", not a bare value
+        return True
+    return False
 
 
 def _lint(rel: str, text: str) -> list[Finding]:
@@ -145,9 +165,8 @@ def _lint(rel: str, text: str) -> list[Finding]:
             for pattern, why in PROSE_LINT:
                 if pattern.search(line):
                     findings.append(Finding("warn", "lint", rel, f"line {lineno}: {why}"))
-        for pattern, why in SECRET_LINT:
-            if pattern.search(line):
-                findings.append(Finding("warn", "lint", rel, f"line {lineno}: {why}"))
+        if _has_secret(line):
+            findings.append(Finding("warn", "lint", rel, f"line {lineno}: secret assignment"))
         for _run in _long_non_hex_runs(line):
             findings.append(Finding("warn", "lint", rel, f"line {lineno}: long base64-like run"))
     flush_table()
@@ -175,45 +194,50 @@ def _origin(hub_text: str) -> tuple[str, str] | None:
     return None
 
 
+def _symbol_present(output: str, symbol: str) -> bool:
+    """False only when the file text was readable and lacks the symbol."""
+    try:
+        data = json.loads(output)
+        text = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+    except (ValueError, KeyError, TypeError):
+        return True
+    return not data["content"] or symbol in text
+
+
 def _pointer_findings(root: Path, docs: list[Path], texts: dict[Path, str], nodes: set[Path]) -> list[Finding]:
     findings: list[Finding] = []
-    branches: dict[str, tuple[int, str]] = {}
+    fetched: dict[tuple[str, str], tuple[int, str]] = {}
     for doc in docs:
         rel = _rel(root, doc)
         for lineno, line, in_fence in _scan(texts[_norm(doc)]):
             if in_fence:
                 continue
             for match in POINTER_RE.finditer(line):
-                repo, path = match.group(1), match.group(2).split(":", 1)[0]
-                hub = _norm(root / "repos" / f"{repo}.md")
-                if hub not in nodes:
-                    continue
-                origin = _origin(texts[hub])
-                if origin is None:
-                    findings.append(
-                        Finding("warn", "broken-pointer", rel, f"line {lineno}: repos/{repo}.md has no Origin line")
-                    )
-                    continue
-                slug = f"{origin[0]}/{origin[1]}"
-                if slug not in branches:
-                    branches[slug] = run_gh(["api", f"repos/{slug}", "--jq", ".default_branch"])
-                rc, out = branches[slug]
+                org, repo, symbol = match.group("org"), match.group("repo"), match.group("symbol")
+                path = match.group("path").split(":", 1)[0]
+                if org:
+                    slug = f"{org}/{repo}"
+                else:
+                    hub = _norm(root / "repos" / f"{repo}.md")
+                    if hub not in nodes:
+                        continue
+                    origin = _origin(texts[hub])
+                    if origin is None:
+                        findings.append(
+                            Finding("warn", "broken-pointer", rel, f"line {lineno}: repos/{repo}.md has no Origin line")
+                        )
+                        continue
+                    slug = f"{origin[0]}/{origin[1]}"
+                if (slug, path) not in fetched:
+                    fetched[slug, path] = run_gh(["api", f"repos/{slug}/contents/{quote(path)}"])
+                rc, out = fetched[slug, path]
                 if rc != 0:
                     level = "error" if _is_404(out) else "warn"
-                    findings.append(
-                        Finding(level, "broken-pointer", rel, f"line {lineno}: cannot read default branch of {slug}: {out.strip()}")
-                    )
-                    continue
-                branch = out.strip()
-                rc, out = run_gh(["api", f"repos/{slug}/contents/{quote(path)}?ref={branch}"])
-                if rc == 0:
-                    continue
-                if _is_404(out):
-                    detail = f"line {lineno}: {repo}:{path} not found on {slug}@{branch}"
+                    what = "not found on" if level == "error" else f"gh failed ({out.strip()}) for"
+                    findings.append(Finding(level, "broken-pointer", rel, f"line {lineno}: {path} {what} {slug}"))
+                elif symbol and not _symbol_present(out, symbol):
+                    detail = f"line {lineno}: symbol {symbol} not found in {path}"
                     findings.append(Finding("error", "broken-pointer", rel, detail))
-                else:
-                    detail = f"line {lineno}: gh failed for {repo}:{path}: {out.strip()}"
-                    findings.append(Finding("warn", "broken-pointer", rel, detail))
     return findings
 
 
@@ -288,8 +312,8 @@ def check(root, agents_md, skip=frozenset(), pointers: bool = False) -> list[Fin
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Mechanical audit of the agent docs tree.")
-    parser.add_argument("--root", type=_path_arg, default=_path_arg("~/.agents/docs"))
-    parser.add_argument("--agents-md", type=_path_arg, default=_path_arg("~/.agents/AGENTS.md"))
+    parser.add_argument("--root", type=Path, default=Path("~/.agents/docs"))
+    parser.add_argument("--agents-md", type=Path, default=Path("~/.agents/AGENTS.md"))
     parser.add_argument("--skip", nargs="+", action="extend", default=[], metavar="KIND")
     parser.add_argument("--pointers", action="store_true", help="check code pointers with gh")
     args = parser.parse_args(argv)

@@ -14,8 +14,7 @@ Agent skills (SKILL.md format) for Claude Code, Codex, and other tools that read
 The two `dev-*` skills work on a docs tree, a git repo of small linked markdown
 docs. `docs-template/` is an empty one. Copy it to `~/.agents/docs`, run `git init`
 there, and read its `writing-docs.md`. Point your `AGENTS.md` at the hub docs, so
-an agent reads the repo doc before it works in a repo. There is no `dev-start`
-skill: the index in `AGENTS.md` replaces it.
+an agent reads the repo doc before it works in a repo.
 
 ## Install
 
