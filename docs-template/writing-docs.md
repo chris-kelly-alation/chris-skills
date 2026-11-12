@@ -53,7 +53,7 @@ Every factual claim about code carries a pointer in this form:
 - `<repo>` is the name of a hub under `~/.agents/docs/repos/`. Example: the hub `repos/my-app.md` makes `my-app` a valid prefix.
 - A token is a pointer only when its prefix is a known repo hub. `localhost:4200` is not a pointer.
 - A repo with no hub is written `<org>/<repo>:<path>`. The checker reads it directly from GitHub.
-- Write no line numbers (`file.ts:12`, `repo:path:12`, `:12-20`). Lines move; symbols and paths survive.
+- Write no line numbers, not as a suffix after the path and not as a range. Lines move; symbols and paths survive.
 
 ## Repo hubs
 
