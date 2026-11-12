@@ -32,6 +32,7 @@ That folder is git-ignored, so capture needs no commit and no lock.
    grep -l "^Origin:.*/<name>$" ~/.agents/docs/repos/*.md
    ```
 
+   Use the hub file's stem (the name without `.md`) as `<name>` from here on.
    If no hub matches, use `scope: core` and write the repo name in the entry.
    If the work belongs to a project (not one repo), use `scope: project:<name>`.
 
@@ -52,18 +53,13 @@ That folder is git-ignored, so capture needs no commit and no lock.
    value, and restatements of things already in core, stack, or repo docs.
 
 3. **Write one file per kept entry** at
-   `~/.agents/docs/inbox/YYYY-MM-DD-<repo-or-project>-<slug>.md`. One file per
-   entry means two agents never write the same file. Each file holds plain
-   `key: value` lines.
-
-   | Key | When | Value |
-   |---|---|---|
-   | `kind` | always | `learning`, `stale-doc`, or `epic-complete` |
-   | `scope` | always | `repo:<name>`, `stack:<name>`, `core`, or `project:<name>` |
-   | `expected`, `actual`, `rule` | `learning` | the lesson |
-   | `doc`, `code shows` | `stale-doc` | the stale doc and what the code shows |
-
-   A `learning` looks like this:
+   `~/.agents/docs/inbox/YYYY-MM-DD-<repo-or-project>-<slug>.md`. If that path
+   exists, add `-2`, `-3`, and so on before `.md`. Do not overwrite. Kinds,
+   scope values, and the secrets rule are in the inbox section of
+   `~/.agents/docs/writing-docs.md`. Read it if you have not. Always write
+   `scope: repo:<name>` with the hub file's stem (for example
+   `alation-terraform-modules`), not the GitHub name. Each file holds plain
+   `key: value` lines. A `learning` looks like this:
 
    ```
    kind: learning
@@ -85,7 +81,5 @@ That folder is git-ignored, so capture needs no commit and no lock.
 
 - Write-only. Do not edit docs under `~/.agents/docs/` here. That is
   consolidation. Do not run `git` in the docs repo.
-- Never write a secret in an entry. Name where it lives (a password manager
-  item, a `.env` file) instead.
 - Keep entries terse but self-contained: a reader (or the consolidator) should
   understand the rule without the session context.

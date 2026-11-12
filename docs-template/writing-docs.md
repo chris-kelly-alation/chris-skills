@@ -39,21 +39,21 @@ A doc holds what the code cannot say.
 | Why: a decision with a date, a one-line reason, and a ticket or PR link | Field lists, API shapes, schemas |
 | Vocabulary: what a term in this area means | Date-stamped snapshots of how code looks today |
 | Traps: a flag that does not gate what it seems to, a legacy product with a similar name | Status words and task checklists |
-| Cross-repo shape: which repo owns which layer | Line-number pointers (a file name with `:` and a number) |
-| Manual procedures (reference docs only): commands, with a pointer to the script they run | Secrets of any kind |
+| Cross-repo shape: which repo owns which layer | Secrets of any kind |
+| Manual procedures (reference docs only): commands, with a pointer to the script they run | |
 
-Never write a secret. Name where it lives instead (a 1Password item, a `.env` file).
+Never write a secret, in a doc or in an inbox entry. Name where it lives instead (a 1Password item, a `.env` file).
 
 ## Code pointers
 
 Every factual claim about code carries a pointer in this form:
 
-`` `<repo>:<path>` ``, and a symbol name after it when useful. Example: `` `<repo>:libs/x/src/y.ts` `` and `` `useThing` ``.
+`` `<repo>:<path>` ``, and a symbol name after it when useful. Example: `` `<repo>:libs/x/src/y.ts` `` and `` `useThing` ``. The checker reads a backticked identifier that follows a pointer on the same line as its symbol and checks that the file contains it.
 
 - `<repo>` is the name of a hub under `~/.agents/docs/repos/`. Example: the hub `repos/my-app.md` makes `my-app` a valid prefix.
 - A token is a pointer only when its prefix is a known repo hub. `localhost:4200` is not a pointer.
-- A repo that the `Origin:` line of its hub puts in another org is still written `<repo>:<path>`. Use the hub name.
-- Do not write a line number. Lines move; symbols and paths survive.
+- A repo with no hub is written `<org>/<repo>:<path>`. The checker reads it directly from GitHub.
+- Write no line numbers (`file.ts:12`, `repo:path:12`, `:12-20`). Lines move; symbols and paths survive.
 
 ## Repo hubs
 
@@ -80,7 +80,9 @@ These two sections go in a feature doc under `projects/`.
   reversed, add a new dated line that says so.
 - **Prior work.** Who built what, with links. Example: "Sam: first version of subscriptions,
   PROJ-123 and PROJ-124." This tells a new agent that Sam worked on the feature before. Hubs record
-  ownership by layer, not by person.
+  ownership by layer, not by person. When an `epic-complete` entry is filed, add the lifted artifact paths to
+  this line (for example `artifacts: 2026-11-11-x-plan.md`). An artifact whose file name appears in a
+  committed Prior work line is ready to delete.
 
 ## Capture: the inbox
 
@@ -88,13 +90,14 @@ Do not edit a doc to record a quick lesson. Write one file to `~/.agents/docs/in
 
 `YYYY-MM-DD-<repo-or-project>-<slug>.md`
 
-One file per entry means two agents never write the same file. Capture needs no lock and no commit.
+If that path exists, add `-2`, `-3`, and so on before `.md`. One file per entry means two agents never write
+the same file. Capture needs no lock and no commit.
 `/dev-consolidate` files each entry into the right doc and deletes it. Before you write an entry, search
 `~/.agents/docs/` for the idea (it may exist).
 
 | Kind | Content |
 |---|---|
-| `learning` | `expected`, `actual`, `rule`, and `scope`. Scope is `repo:<name>`, `stack:<name>`, `core`, or `project:<name>`. |
+| `learning` | `expected`, `actual`, `rule`, and `scope`. Scope is `repo:<name>`, `stack:<name>`, `core`, or `project:<name>`. For `repo:<name>`, `<name>` is the hub file name without `.md`, not the GitHub name. |
 | `stale-doc` | The doc path, and what the code shows instead. |
 | `epic-complete` | Written by `/orchestrator` when the last PR of an epic merges. Lists the decisions, the merged PRs, the tickets, and the paths of the plan and spec artifacts. |
 
