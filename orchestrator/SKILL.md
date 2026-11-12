@@ -19,7 +19,7 @@ This structure exists for two reasons. The user wants a direct back-and-forth wi
 
 ## Setup (once per epic)
 
-1. **Find the plan doc.** Ask the user for its path if it is not clear. If the user has no plan doc yet, new plan docs go to `~/.agents/artifacts/YYYY-MM-DD-<epic>.md`. Read it completely.
+1. **Find the plan doc.** Ask the user for its path if it is not clear. If the user has no plan doc yet and the directory `~/.agents/artifacts/` exists, new plan docs go to `~/.agents/artifacts/YYYY-MM-DD-<epic>.md`. If that directory does not exist, ask the user where to put the plan doc. Read it completely.
 2. **Check that the doc can be orchestrated.** It needs:
    - a list of PRs with IDs
    - a dependency chart
@@ -77,7 +77,7 @@ The formats are in `references/protocol.md`. Messages arrive in your conversatio
 
 **`MERGED`:** set the status to merged. Find the PRs that are now unblocked. Tell the user which PR starts next, and offer to run the entry gate.
 
-When the **last** PR of the epic is merged, write one inbox file, `~/.agents/docs/inbox/YYYY-MM-DD-<epic>-epic-complete.md`, so `/dev-consolidate` can lift the decisions into the docs. Use plain `key: value` lines:
+When the **last** PR of the epic is merged, and only if the directory `~/.agents/docs/inbox/` exists (if it does not, skip this step without a message), write one inbox file, `~/.agents/docs/inbox/YYYY-MM-DD-<epic>-epic-complete.md`, so `/dev-consolidate` can lift the decisions into the docs. Use plain `key: value` lines:
 
 ```
 kind: epic-complete
