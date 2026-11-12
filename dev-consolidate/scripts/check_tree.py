@@ -30,7 +30,7 @@ MENTION_RE = re.compile(r"~/\.agents/docs/([A-Za-z0-9_./-]+\.md)(?![A-Za-z0-9_./
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 INLINE_CODE_RE = re.compile(r"`[^`]*`")
 SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
-POINTER_RE = re.compile(r"`([A-Za-z0-9_.-]+):([^`\s]+)`")
+POINTER_RE = re.compile(r"`([A-Za-z0-9_.-]+):([^`\s]*[/.][^`\s]*)`")
 ORIGIN_RE = re.compile(r"^Origin:\s*github\.com/([^/\s]+)/([^/\s]+?)\s*$")
 TABLE_SEP_RE = re.compile(r"\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?")
 

@@ -244,3 +244,17 @@ def test_exit_codes(tmp_path):
     )
     assert err_run.returncode == 1
     assert "error orphan lonely.md:" in err_run.stdout
+
+
+def test_pointer_needs_path_separator(tmp_path, monkeypatch):
+    import check_tree
+    (tmp_path / "repos").mkdir()
+    (tmp_path / "repos" / "alation.md").write_text("# a\nOrigin: github.com/acme/alation\n")
+    (tmp_path / "doc.md").write_text("Use `alation:ask` here.\n")
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("")
+    calls = []
+    monkeypatch.setattr(check_tree, "run_gh", lambda args: (calls.append(args) or (0, "main")))
+    found = check_tree.check(tmp_path, agents, skip={"orphan"}, pointers=True)
+    assert not [f for f in found if f.kind == "broken-pointer"]
+    assert not [c for c in calls if "contents" in " ".join(c)]
